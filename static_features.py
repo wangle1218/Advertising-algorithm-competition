@@ -24,19 +24,20 @@ class CVStatistic(object):
         """
         df为DataFrame格式数据，包含训练集和测试集，
         """
+        lbl = LabelEncoder()
         df['index'] = list(range(df.shape[0]))
         for afeat in self.adFeat_list:
             for ufeat in self.userFeat_list:
                 concat_feat = afeat + '_' + ufeat
-                df_cv = df[['index',afeat, ufeat, self.label]].copy()
-                df_cv[concat_feat] = df_cv[afeat].astype('str') + '_' + df_cv[ufeat].astype('str')
-                df_cv = df_cv[['index',concat_feat, self.label]]
-                
-                df_cv[concat_feat] = self._remove_lowcase(df_cv[concat_feat])
+                df[concat_feat] = df[afeat].astype('str') + '_' +df[ufeat].astype('str')
+                df[concat_feat] = lbl.fit_transform(df[concat_feat])
+                df[concat_feat] = self._remove_lowcase(df[concat_feat])
 
-                training = df_cv[df_cv.label!=-1]  
+                df_cv = df[['index',concat_feat, self.label]].copy()
+
+                training = df_cv[~df_cv[self.label].isnull()]  
                 training = training.reset_index(drop=True)
-                predict = df_cv[df_cv.label==-1]
+                predict = df_cv[df_cv[self.label].isnull()]
                 del df_cv
                 gc.collect()
 
@@ -66,7 +67,7 @@ class CVStatistic(object):
                 
     def _remove_lowcase(self, se):
         count = dict(se.value_counts())
-        se = se.map(lambda x : -1 if count[x]<10 else x)
+        se = se.map(lambda x : -1 if count[x]<5 else x)
         return se
 
 
@@ -76,8 +77,9 @@ class CVStatistic(object):
         df = df.groupby(feature)[self.label].agg(['sum','count']).reset_index()
 
         new_feat_name = feature + '_stas'
-        df.loc[:,new_feat_name] = 100 * (df['sum'] + 0.0001) / (df['count'] + 0.0001)
-        df.loc[:,new_feat_name] = np.round(df.loc[:,new_feat_name].values,4)
+        df.loc[:,new_feat_name] = 100 * (df['sum'] + 0.001) / (df['count'] + 0.001)
+        df[new_feat_name] = pd.cut(df[new_feat_name], bins=100,labels=False)
+        df[new_feat_name] = df[new_feat_name].astype(np.int32)
         df_stas = df[[feature,new_feat_name]]
         df_val = pd.merge(df_val, df_stas, how='left', on=feature)
 
